@@ -3,4 +3,4 @@ yt-dlp==2025.2.19
 requests==2.31.0
 flask==3.0.0
 gunicorn==21.2.0
-YouTubeMusic==4.1.0
+youtubemusic==4.1.0
