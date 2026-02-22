@@ -20,6 +20,9 @@ ytmusic = YouTubeMusic()
 # Количество результатов на странице
 RESULTS_PER_PAGE = 10
 
+# Путь к ffmpeg внутри проекта (распаковывается при сборке)
+FFMPEG_PATH = os.path.join(os.path.dirname(__file__), 'ffmpeg_bin', 'ffmpeg')
+
 # ---------- Вспомогательные функции ----------
 def format_duration(seconds):
     """Форматирует длительность (секунды) в мм:сс или чч:мм:сс"""
@@ -73,7 +76,8 @@ async def download_track_as_mp3(video_id: str, track_info: dict):
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'max_filesize': 50 * 1024 * 1024,  # 50 MB
+        'max_filesize': 50 * 1024 * 1024,      # 50 MB
+        'ffmpeg_location': FFMPEG_PATH,        # указываем путь к локальному ffmpeg
     }
 
     loop = asyncio.get_event_loop()
