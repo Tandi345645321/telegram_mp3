@@ -3,19 +3,16 @@ import asyncio
 import os
 import uuid
 import re
+import json
 from datetime import timedelta
 
 import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from youtubemusic import YouTubeMusic
 
 import config
 
 logger = logging.getLogger(__name__)
-
-# Инициализация YouTubeMusic (без ключей)
-ytmusic = YouTubeMusic()
 
 # Количество результатов на странице
 RESULTS_PER_PAGE = 10
@@ -34,29 +31,62 @@ def clean_filename(title: str) -> str:
     """Удаляет недопустимые символы из имени файла"""
     return re.sub(r'[\\/*?:"<>|]', "", title)
 
-# ---------- Поиск музыки (без API ключей) ----------
+# ---------- Поиск музыки через yt-dlp ----------
 async def search_youtube(query: str, max_results=20):
-    """Ищет треки через YouTubeMusic"""
+    """
+    Ищет видео на YouTube через yt-dlp (без API ключей)
+    Возвращает список треков в том же формате, что и раньше
+    """
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,  # не скачиваем, только получаем информацию
+        'force_generic_extractor': False,
+    }
+
+    search_query = f"ytsearch{max_results}:{query}"
+
+    loop = asyncio.get_event_loop()
     try:
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(
-            None,
-            lambda: ytmusic.search(query, limit=max_results)
-        )
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # yt-dlp синхронный, запускаем в executor
+            info = await loop.run_in_executor(
+                None,
+                lambda: ydl.extract_info(search_query, download=False)
+            )
+
+        if not info or 'entries' not in info:
+            return []
+
         tracks = []
-        for item in results:
+        for entry in info['entries']:
+            if not entry:
+                continue
+
+            # Длительность может быть None для некоторых видео
+            duration = entry.get('duration', 0)
+
+            # Исполнитель и название — пытаемся получить из title
+            title = entry.get('title', 'Unknown Title')
+            channel = entry.get('channel', 'Unknown Artist')
+
+            # Иногда channel может быть пустым, тогда используем uploader
+            if not channel:
+                channel = entry.get('uploader', 'Unknown Artist')
+
             tracks.append({
-                'id': item.video_id,
-                'title': item.title,
-                'artist': item.artist or item.channel,
-                'full_name': f"{item.artist or item.channel} - {item.title}",
+                'id': entry['id'],
+                'title': title,
+                'artist': channel,
+                'full_name': f"{channel} - {title}",
                 'source': 'youtube',
-                'duration': item.duration,      # длительность в секундах
-                'video_id': item.video_id,
+                'duration': duration,
+                'video_id': entry['id'],
             })
+
         return tracks
     except Exception as e:
-        logger.exception(f"Ошибка поиска: {e}")
+        logger.exception(f"Ошибка поиска через yt-dlp: {e}")
         return []
 
 # ---------- Скачивание трека в MP3 ----------
